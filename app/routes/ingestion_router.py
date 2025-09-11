@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Query
-from app.services.ingestion_service import TwitterIngestor
+from app.services.ingestion_service import TwitterIngestor, RedditIngestor
 from app.storage.mongo_handler import MongoHandler
+from app.utils.logger import logger
 
 router = APIRouter(prefix="/ingestion", tags=["Data Ingestion"])
 
@@ -14,7 +15,7 @@ def serialize_docs(docs):
             doc["_id"] = str(doc["_id"])
     return docs
 
-@router.get("/ingest/twitter/live")
+@router.get("/twitter/live")
 def fetch_live_tweets(query: str = Query(..., description="Search query"),
                       max_results: int = Query(20, ge=10, le=100)):
 
@@ -25,7 +26,7 @@ def fetch_live_tweets(query: str = Query(..., description="Search query"),
     return {"source": "twitter", "fetched": len(tweets), "data": serialize_docs(tweets)}
 
 
-@router.get("/ingest/twitter/cache")
+@router.get("/twitter/cache")
 def fetch_cached_tweets(limit: int = Query(20, ge=1, le=100)):
     """
     Fetch tweets from MongoDB cache instead of hitting Twitter API.
@@ -34,3 +35,41 @@ def fetch_cached_tweets(limit: int = Query(20, ge=1, le=100)):
     # logger.info(f"Fetching cached tweets, limit={limit}")
     tweets = mongo.fetch_data("twitter_data", limit=limit)
     return {"source": "twitter_cache", "fetched": len(tweets), "data": tweets}
+
+
+reddit = RedditIngestor()
+
+@router.get("/reddit/live")
+def fetch_live_reddit_posts(
+    subreddit: str = Query(..., description="Subreddit name"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    Fetch live posts from a subreddit and save them to MongoDB.
+    """
+    logger.info(f"Fetching live Reddit posts for r/{subreddit}")
+    posts = reddit.fetch_subreddit_posts(subreddit_name=subreddit, limit=limit)
+    if posts:
+        mongo.insert_data("reddit_data", posts)
+    return {
+        "source": f"reddit:{subreddit}",
+        "fetched": len(posts),
+        "data": reddit.serialize_docs(posts),
+    }
+
+
+@router.get("/reddit/cache")
+def fetch_cached_reddit_posts(
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    Fetch cached Reddit posts from MongoDB (no API call).
+    """
+    logger.info(f"Fetching cached Reddit posts, limit={limit}")
+    posts = mongo.fetch_data("reddit_data", limit=limit)
+    return {
+        "source": "reddit_cache",
+        "fetched": len(posts),
+        "data": RedditIngestor.serialize_docs(posts),
+    }
+
