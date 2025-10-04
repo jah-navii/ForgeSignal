@@ -1,5 +1,6 @@
 import tweepy
 import praw
+import requests
 from app.utils.config import Config
 from app.utils.logger import logger
 
@@ -51,3 +52,47 @@ class RedditIngestor:
                 d["_id"] = str(d["_id"])
             serialized.append(d)
         return serialized
+    
+
+class NewsFeedIngestor:
+    def __init__(self):
+        self.api_key = Config.NEWSAPI_KEY
+        self.base_url = "https://newsapi.org/v2/everything"
+
+    def fetch_news(self, query: str, page_size: int = 20, language: str = "en"):
+        """
+        Fetch recent financial news articles based on query.
+        """
+        logger.info(f"Fetching news articles for query: {query}")
+        params = {
+            "q": query,
+            "language": language,
+            "pageSize": page_size,
+            "sortBy": "publishedAt",
+            "apiKey": self.api_key,
+        }
+        try:
+            response = requests.get(self.base_url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            articles = [
+                {
+                    "id": idx,
+                    "source": a.get("source", {}).get("name"),
+                    "title": a.get("title"),
+                    "description": a.get("description"),
+                    "url": a.get("url"),
+                    "published_at": a.get("publishedAt"),
+                    "content": a.get("content"),
+                }
+                for idx, a in enumerate(data.get("articles", []))
+            ]
+
+            logger.info(f"Fetched {len(articles)} articles.")
+            return articles
+
+        except Exception as e:
+            logger.error(f"Error fetching news: {str(e)}")
+            return []
+
