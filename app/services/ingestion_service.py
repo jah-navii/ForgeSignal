@@ -1,6 +1,7 @@
 import tweepy
 import praw
 import requests
+import yfinance as yf
 from app.utils.config import Config
 from app.utils.logger import logger
 
@@ -95,4 +96,22 @@ class NewsFeedIngestor:
         except Exception as e:
             logger.error(f"Error fetching news: {str(e)}")
             return []
+        
+
+class FinancialIngestor:
+    def __init__(self):
+        pass  # yfinance doesn't need an API key setup
+
+    def fetch_stock_data(self, symbol: str, period="1mo", interval="1d"):
+        """
+        Fetch historical stock data for a symbol.
+        """
+        logger.info(f"Fetching financial data for {symbol}")
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period=period, interval=interval)
+        
+        records = hist.reset_index().to_dict(orient="records")
+        logger.info(f"Fetched {len(records)} records for {symbol}")
+        return records
+
 

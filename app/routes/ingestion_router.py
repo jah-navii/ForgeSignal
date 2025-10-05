@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query
-from app.services.ingestion_service import TwitterIngestor, RedditIngestor, NewsFeedIngestor
+from app.services.ingestion_service import TwitterIngestor, RedditIngestor, NewsFeedIngestor, FinancialIngestor
 from app.storage.mongo_handler import MongoHandler
 from app.utils.logger import logger
 
@@ -9,6 +9,7 @@ mongo = MongoHandler()
 twitter = TwitterIngestor()
 reddit = RedditIngestor()
 news = NewsFeedIngestor()
+financial = FinancialIngestor()
 
 def serialize_docs(docs):
     """Convert ObjectId to string for JSON serialization."""
@@ -109,3 +110,16 @@ def fetch_cached_news(
         "data": serialize_docs(articles),
     }
 
+@router.get("/financial/live")
+def fetch_live_financial_data(symbol: str = Query(..., description="Stock symbol"),
+                              period: str = Query("1mo"),
+                              interval: str = Query("1d")):
+    data = financial.fetch_stock_data(symbol=symbol, period=period, interval=interval)
+    if data:
+        mongo.insert_data("financial_data", data)
+    return {"source": f"financial:{symbol}", "fetched": len(data), "data": serialize_docs(data)}
+
+@router.get("/financial/cache")
+def fetch_cached_financial_data(limit: int = Query(20, ge=1, le=100)):
+    data = mongo.fetch_data("financial_data", limit=limit)
+    return {"source": "financial_cache", "fetched": len(data), "data": data}
